@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
+
 import '../cubits/atendimento_execution_cubit.dart';
 import '../../domain/entities/atendimento.dart';
+import '../../data/datasources/database_helper.dart';
 
 class AtendimentoExecutionPage extends StatefulWidget {
   final Atendimento atendimento;
@@ -26,17 +30,85 @@ class _AtendimentoExecutionPageState extends State<AtendimentoExecutionPage> {
   void initState() {
     super.initState();
     _observationsController.text = widget.atendimento.anotacoes ?? '';
+    _loadExistingImage();
     
-    // Carregar imagem existente se houver
-    if (widget.atendimento.imagemPath != null) {
-      _selectedImage = File(widget.atendimento.imagemPath!);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AtendimentoExecutionCubit>().loadAtendimento(widget.atendimento);
+    });
+  }
+
+  Future<void> _loadExistingImage() async {
+    if (widget.atendimento.imagemPath != null && widget.atendimento.imagemPath!.isNotEmpty) {
+      print('🔍 Carregando imagem existente do banco...');
+      print('📁 Caminho no banco: ${widget.atendimento.imagemPath}');
+      
+      final imageFile = File(widget.atendimento.imagemPath!);
+      final bool exists = await imageFile.exists();
+      print('📁 Arquivo existe no sistema: $exists');
+      
+      if (exists) {
+        setState(() {
+          _selectedImage = imageFile;
+        });
+        print('✅ Imagem carregada com sucesso');
+      } else {
+        print('❌ IMAGEM NÃO ENCONTRADA no sistema de arquivos');
+        // Tenta carregar do cubit (estado atual)
+        final currentState = context.read<AtendimentoExecutionCubit>().state;
+        if (currentState is AtendimentoExecutionLoaded && currentState.imagemPath != null) {
+          print('🔄 Tentando carregar do estado do cubit...');
+          final cubitImageFile = File(currentState.imagemPath!);
+          if (await cubitImageFile.exists()) {
+            setState(() {
+              _selectedImage = cubitImageFile;
+            });
+            print('✅ Imagem carregada do cubit');
+          }
+        }
+      }
+    } else {
+      print('ℹ️ Nenhum caminho de imagem salvo no banco para este atendimento');
     }
   }
 
-  @override
-  void dispose() {
-    _observationsController.dispose();
-    super.dispose();
+  Future<String> _saveImagePermanently(String imagePath) async {
+    try {
+      print('📁 Iniciando salvamento permanente da imagem...');
+      print('📁 Caminho original: $imagePath');
+      
+      final Directory appDir = await getApplicationDocumentsDirectory();
+      final String imagesDir = path.join(appDir.path, 'atendimento_images');
+      print('📁 Diretório do app: $appDir');
+      print('📁 Diretório de imagens: $imagesDir');
+      
+      // Cria o diretório se não existir
+      final Directory dir = Directory(imagesDir);
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+        print('✅ Diretório criado: $imagesDir');
+      }
+      
+      // Gera um nome único para a imagem
+      final String fileName = 'atendimento_${widget.atendimento.id}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final String newPath = path.join(imagesDir, fileName);
+      print('📁 Novo caminho: $newPath');
+      
+      // Copia a imagem para o diretório permanente
+      final File originalImage = File(imagePath);
+      final File savedImage = await originalImage.copy(newPath);
+      
+      // Verifica se o arquivo foi criado
+      final bool fileExists = await savedImage.exists();
+      print('📁 Arquivo salvo existe: $fileExists');
+      print('📁 Tamanho do arquivo: ${await savedImage.length()} bytes');
+      
+      print('✅ Imagem salva permanentemente: $newPath');
+      return savedImage.path;
+    } catch (e) {
+      print('❌ Erro ao salvar imagem: $e');
+      print('❌ Stack trace: ${e.toString()}');
+      return imagePath;
+    }
   }
 
   Future<void> _captureImageFromCamera() async {
@@ -48,12 +120,11 @@ class _AtendimentoExecutionPageState extends State<AtendimentoExecutionPage> {
       );
 
       if (image != null) {
+        final String permanentPath = await _saveImagePermanently(image.path);
         setState(() {
-          _selectedImage = File(image.path);
+          _selectedImage = File(permanentPath);
         });
-        
-        // Atualizar no cubit
-        context.read<AtendimentoExecutionCubit>().updateImage(image.path);
+        context.read<AtendimentoExecutionCubit>().updateImage(permanentPath);
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -74,12 +145,11 @@ class _AtendimentoExecutionPageState extends State<AtendimentoExecutionPage> {
       );
 
       if (image != null) {
+        final String permanentPath = await _saveImagePermanently(image.path);
         setState(() {
-          _selectedImage = File(image.path);
+          _selectedImage = File(permanentPath);
         });
-        
-        // Atualizar no cubit
-        context.read<AtendimentoExecutionCubit>().updateImage(image.path);
+        context.read<AtendimentoExecutionCubit>().updateImage(permanentPath);
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -93,6 +163,12 @@ class _AtendimentoExecutionPageState extends State<AtendimentoExecutionPage> {
 
   void _updateObservations(String observations) {
     context.read<AtendimentoExecutionCubit>().updateObservations(observations);
+  }
+
+  @override
+  void dispose() {
+    _observationsController.dispose();
+    super.dispose();
   }
 
   @override
@@ -161,7 +237,8 @@ class _AtendimentoExecutionPageState extends State<AtendimentoExecutionPage> {
                 
                 // Botão Finalizar
                 if (widget.atendimento.status != StatusAtendimento.finalizado)
-                  _buildFinalizeButton(),
+                  _buildFinalizeButton()
+      
               ],
             ),
           );
@@ -253,7 +330,7 @@ class _AtendimentoExecutionPageState extends State<AtendimentoExecutionPage> {
                       return Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.error, color: Colors.red, size: 40),
+                          const Icon(Icons.error, color: Colors.red, size: 40),
                           const SizedBox(height: 8),
                           Text(
                             'Erro ao carregar imagem',

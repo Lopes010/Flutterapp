@@ -10,7 +10,7 @@ import 'features/atendimento/domain/usecases/delete_atendimento.dart';
 import 'features/atendimento/domain/usecases/update_atendimento_imagem.dart';
 import 'features/atendimento/presentation/cubits/atendimento_list_cubit.dart';
 import 'features/atendimento/presentation/cubits/atendimento_form_cubit.dart';
-import 'features/atendimento/presentation/pages/atendimento_list_page.dart';
+import 'features/atendimento/presentation/pages/splash_screen.dart'; // ✅ Importação adicionada
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,25 +29,21 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiRepositoryProvider(
-      providers: [
-        RepositoryProvider<AtendimentoRepositoryImpl>(
-          create: (context) => AtendimentoRepositoryImpl(dbHelper: dbHelper),
-        ),
-      ],
+    return RepositoryProvider(
+      create: (BuildContext context) => AtendimentoRepositoryImpl(dbHelper: dbHelper),
       child: MultiBlocProvider(
         providers: [
-          BlocProvider<AtendimentoListCubit>(
-            create: (context) => AtendimentoListCubit(
-              getAtendimentos: GetAtendimentos(context.read<AtendimentoRepositoryImpl>()),
-              getAtendimentosPorStatus: GetAtendimentosPorStatus(context.read<AtendimentoRepositoryImpl>()),
-              deleteAtendimento: DeleteAtendimento(context.read<AtendimentoRepositoryImpl>()),
+          BlocProvider(
+            create: (BuildContext context) => AtendimentoListCubit(
+              getAtendimentos: GetAtendimentos(RepositoryProvider.of<AtendimentoRepositoryImpl>(context)),
+              getAtendimentosPorStatus: GetAtendimentosPorStatus(RepositoryProvider.of<AtendimentoRepositoryImpl>(context)),
+              deleteAtendimento: DeleteAtendimento(RepositoryProvider.of<AtendimentoRepositoryImpl>(context)),
             ),
           ),
-          BlocProvider<AtendimentoFormCubit>(
-            create: (context) => AtendimentoFormCubit(
-              createAtendimento: CreateAtendimento(context.read<AtendimentoRepositoryImpl>()),
-              updateAtendimento: UpdateAtendimento(context.read<AtendimentoRepositoryImpl>()),
+          BlocProvider(
+            create: (BuildContext context) => AtendimentoFormCubit(
+              createAtendimento: CreateAtendimento(RepositoryProvider.of<AtendimentoRepositoryImpl>(context)),
+              updateAtendimento: UpdateAtendimento(RepositoryProvider.of<AtendimentoRepositoryImpl>(context)),
             ),
           ),
         ],
@@ -57,7 +53,7 @@ class MyApp extends StatelessWidget {
             primarySwatch: Colors.brown,
             visualDensity: VisualDensity.adaptivePlatformDensity,
           ),
-          home: const AtendimentoListPage(),
+          home: const SplashScreen(), // ✅ Alterado para SplashScreen
         ),
       ),
     );

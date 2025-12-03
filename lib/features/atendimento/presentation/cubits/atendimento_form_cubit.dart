@@ -19,7 +19,7 @@ class AtendimentoFormCubit extends Cubit<AtendimentoFormState> {
     _editingAtendimento = atendimento;
     emit(AtendimentoFormEditing(atendimento: atendimento));
   }
-// VERIFIQUE se o método saveAtendimento está EXATAMENTE assim:
+
 Future<void> saveAtendimento({
   required String descricao,
   String? anotacoes,

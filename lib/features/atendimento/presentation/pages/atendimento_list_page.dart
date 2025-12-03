@@ -1,4 +1,3 @@
-// IMPORTS COMPLETOS - verifique se tem todos:
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../cubits/atendimento_list_cubit.dart';
@@ -6,10 +5,10 @@ import '../cubits/atendimento_execution_cubit.dart';
 import '../../domain/entities/atendimento.dart';
 import '../../data/repositories/atendimento_repository_impl.dart';
 import '../../domain/usecases/update_atendimento.dart';
-import '../../domain/usecases/finalizar_atendimento.dart';
 import '../../domain/usecases/update_atendimento_imagem.dart';
 import 'atendimento_execution_page.dart';
 import 'atendimento_form_page.dart';
+import '../../data/datasources/database_helper.dart';
 
 class AtendimentoListPage extends StatefulWidget {
   const AtendimentoListPage({Key? key}) : super(key: key);
@@ -19,11 +18,13 @@ class AtendimentoListPage extends StatefulWidget {
 }
 
 class _AtendimentoListPageState extends State<AtendimentoListPage> {
+  final DatabaseHelper dbHelper = DatabaseHelper();
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AtendimentoListCubit>().loadAtendimentos();
+      BlocProvider.of<AtendimentoListCubit>(context).loadAtendimentos();
     });
   }
 
@@ -34,6 +35,22 @@ class _AtendimentoListPageState extends State<AtendimentoListPage> {
         title: const Text('Atendimentos'),
         backgroundColor: Colors.brown,
         actions: [
+          // ✅ BOTÃO REFRESH
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              print('🔄 Refresh manual acionado');
+              BlocProvider.of<AtendimentoListCubit>(context).loadAtendimentos();
+              
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Lista atualizada!'),
+                  duration: Duration(seconds: 1),
+                ),
+              );
+            },
+            tooltip: 'Atualizar lista',
+          ),
           IconButton(
             icon: const Icon(Icons.filter_list),
             onPressed: _showFilterDialog,
@@ -41,9 +58,21 @@ class _AtendimentoListPageState extends State<AtendimentoListPage> {
         ],
       ),
       body: BlocBuilder<AtendimentoListCubit, AtendimentoListState>(
-        builder: (context, state) {
-          if (state is AtendimentoListLoading) {
-            return const Center(child: CircularProgressIndicator());
+        builder: (BuildContext context, AtendimentoListState state) {
+              if (state is AtendimentoListLoading) {
+   return Column(
+     children: [
+       LinearProgressIndicator(
+        backgroundColor: Colors.brown[100],
+        valueColor: AlwaysStoppedAnimation<Color>(Colors.brown),
+        ),
+         const Expanded(
+        child: Center(
+            child: Text('Carregando atendimentos...'),
+         ),
+         ),
+    ],
+  );
           } else if (state is AtendimentoListError) {
             return Center(
               child: Column(
@@ -59,7 +88,7 @@ class _AtendimentoListPageState extends State<AtendimentoListPage> {
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: () {
-                      context.read<AtendimentoListCubit>().loadAtendimentos();
+                      BlocProvider.of<AtendimentoListCubit>(context).loadAtendimentos();
                     },
                     child: const Text('Tentar Novamente'),
                   ),
@@ -67,108 +96,7 @@ class _AtendimentoListPageState extends State<AtendimentoListPage> {
               ),
             );
           } else if (state is AtendimentoListLoaded) {
-            final atendimentos = state.atendimentos;
-            if (atendimentos.isEmpty) {
-              return const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.assignment, size: 64, color: Colors.grey),
-                    SizedBox(height: 16),
-                    Text(
-                      'Nenhum atendimento encontrado',
-                      style: TextStyle(fontSize: 18, color: Colors.grey),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      'Clique no botão + para criar o primeiro',
-                      style: TextStyle(fontSize: 14, color: Colors.grey),
-                    ),
-                  ],
-                ),
-              );
-            }
-            return ListView.builder(
-              itemCount: atendimentos.length,
-              itemBuilder: (context, index) {
-                final atendimento = atendimentos[index];
-                return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: ListTile(
-                    leading: _buildStatusIcon(atendimento.status),
-                    title: Text(
-                      atendimento.descricao,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Status: ${_statusText(atendimento.status)}'),
-                        if (atendimento.anotacoes != null)
-                          Text(
-                            'Anotações: ${atendimento.anotacoes}',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        Text(
-                          'Criado: ${_formatDate(atendimento.dataCriacao)}',
-                          style: const TextStyle(fontSize: 12, color: Colors.grey),
-                        ),
-                      ],
-                    ),
-                    trailing: PopupMenuButton<String>(
-                      onSelected: (value) {
-                        _handleMenuAction(value, atendimento, context);
-                      },
-                      itemBuilder: (BuildContext context) => [
-                          const PopupMenuItem<String>(
-                                    value: 'execute',
-                                          child: Row(
-                                           children: [
-                                  Icon(Icons.play_arrow),
-                                   SizedBox(width: 8),
-                                  Text('Executar'),
-                                          ],
-                                        ),
-                                       ), 
-                        const PopupMenuItem<String>(
-                          value: 'view',
-                          child: Row(
-                            children: [
-                              Icon(Icons.visibility),
-                              SizedBox(width: 8),
-                              Text('Visualizar'),
-                            ],
-                          ),
-                        ),
-                        const PopupMenuItem<String>(
-                          value: 'edit',
-                          child: Row(
-                            children: [
-                              Icon(Icons.edit),
-                              SizedBox(width: 8),
-                              Text('Editar'),
-                            ],
-                          ),
-                        ),
-                        const PopupMenuItem<String>(
-                          value: 'delete',
-                          child: Row(
-                            children: [
-                              Icon(Icons.delete, color: Colors.red),
-                              SizedBox(width: 8),
-                              Text('Excluir', style: TextStyle(color: Colors.red)),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    onTap: () {
-                      _showAtendimentoDetails(atendimento, context);
-                    },
-                  ),
-                );
-              },
-            );
+            return _buildAtendimentosList(state.atendimentos);
           } else {
             return const Center(child: Text('Carregando atendimentos...'));
           }
@@ -178,10 +106,11 @@ class _AtendimentoListPageState extends State<AtendimentoListPage> {
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => const AtendimentoFormPage()),
+            MaterialPageRoute(
+              builder: (BuildContext context) => AtendimentoFormPage(),
+            ),
           ).then((_) {
-            // Recarregar lista quando voltar do formulário
-            context.read<AtendimentoListCubit>().loadAtendimentos();
+            BlocProvider.of<AtendimentoListCubit>(context).loadAtendimentos();
           });
         },
         backgroundColor: Colors.brown,
@@ -189,7 +118,119 @@ class _AtendimentoListPageState extends State<AtendimentoListPage> {
       ),
     );
   }
+  Widget _buildAtendimentosList(List<Atendimento> atendimentos) {
+    if (atendimentos.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.assignment, size: 64, color: Colors.grey),
+            SizedBox(height: 16),
+            Text(
+              'Nenhum atendimento encontrado',
+              style: TextStyle(fontSize: 18, color: Colors.grey),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Clique no botão + para criar o primeiro',
+              style: TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    return RefreshIndicator(
+      onRefresh: () async {
+        BlocProvider.of<AtendimentoListCubit>(context).loadAtendimentos();
+      },
+      backgroundColor: Colors.brown,
+      color: Colors.white,
+      child: ListView.builder(
+        itemCount: atendimentos.length,
+        itemBuilder: (BuildContext context, int index) {
+          final atendimento = atendimentos[index];
+          return Card(
+            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: ListTile(
+              leading: _buildStatusIcon(atendimento.status),
+              title: Text(
+                atendimento.descricao,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Status: ${_statusText(atendimento.status)}'),
+                  if (atendimento.anotacoes != null)
+                    Text(
+                      'Anotações: ${atendimento.anotacoes}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  Text(
+                    'Criado: ${_formatDate(atendimento.dataCriacao)}',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+              trailing: PopupMenuButton<String>(
+                onSelected: (String value) {
+                  _handleMenuAction(value, atendimento, context);
+                },
+                itemBuilder: (BuildContext context) => [
+                  const PopupMenuItem<String>(
+                    value: 'execute',
+                    child: Row(
+                      children: [
+                        Icon(Icons.play_arrow),
+                        SizedBox(width: 8),
+                        Text('Executar'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem<String>(
+                    value: 'view',
+                    child: Row(
+                      children: [
+                        Icon(Icons.visibility),
+                        SizedBox(width: 8),
+                        Text('Visualizar'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem<String>(
+                    value: 'edit',
+                    child: Row(
+                      children: [
+                        Icon(Icons.edit),
+                        SizedBox(width: 8),
+                        Text('Editar'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem<String>(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete, color: Colors.red),
+                        SizedBox(width: 8),
+                        Text('Excluir', style: TextStyle(color: Colors.red)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              onTap: () {
+                _showAtendimentoDetails(atendimento, context);
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
 
+  // ✅ MÉTODOS AUXILIARES (já existentes)
   Widget _buildStatusIcon(StatusAtendimento status) {
     switch (status) {
       case StatusAtendimento.ativo:
@@ -222,9 +263,9 @@ class _AtendimentoListPageState extends State<AtendimentoListPage> {
 
   void _handleMenuAction(String action, Atendimento atendimento, BuildContext context) {
     switch (action) {
-          case 'execute':
-      _navigateToExecution(atendimento, context);
-      break;
+      case 'execute':
+        _navigateToExecution(atendimento, context);
+        break;
       case 'view':
         _showAtendimentoDetails(atendimento, context);
         break;
@@ -276,16 +317,15 @@ class _AtendimentoListPageState extends State<AtendimentoListPage> {
   }
 
   void _editAtendimento(Atendimento atendimento, BuildContext context) {
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-     builder: (context) => AtendimentoFormPage(atendimentoParaEditar: atendimento),
-    ),
-  ).then((_) {
-    // Recarregar lista quando voltar da edição
-    context.read<AtendimentoListCubit>().loadAtendimentos();
-  });
-}
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (BuildContext context) => AtendimentoFormPage(atendimentoParaEditar: atendimento),
+      ),
+    ).then((_) {
+      BlocProvider.of<AtendimentoListCubit>(context).loadAtendimentos();
+    });
+  }
 
   void _showDeleteDialog(Atendimento atendimento, BuildContext context) {
     showDialog(
@@ -301,7 +341,7 @@ class _AtendimentoListPageState extends State<AtendimentoListPage> {
             ),
             TextButton(
               onPressed: () {
-                context.read<AtendimentoListCubit>().deleteAtendimentoById(atendimento.id!);
+                BlocProvider.of<AtendimentoListCubit>(context).deleteAtendimentoById(atendimento.id!);
                 Navigator.of(context).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -318,23 +358,29 @@ class _AtendimentoListPageState extends State<AtendimentoListPage> {
     );
   }
 
-void _navigateToExecution(Atendimento atendimento, BuildContext context) {
-  Navigator.push(
-    context, // ← AQUI está usando o context do parâmetro
-    MaterialPageRoute(
-      builder: (context) => BlocProvider(
-        create: (context) => AtendimentoExecutionCubit(
-          updateAtendimento: UpdateAtendimento(context.read<AtendimentoRepositoryImpl>()),
-          updateAtendimentoImagem: UpdateAtendimentoImagem(context.read<AtendimentoRepositoryImpl>()),
+  void _navigateToExecution(Atendimento atendimento, BuildContext context) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (BuildContext context) => BlocProvider(
+          create: (BuildContext context) => AtendimentoExecutionCubit(
+            updateAtendimento: UpdateAtendimento(
+              AtendimentoRepositoryImpl(dbHelper: DatabaseHelper())
+            ),
+            updateAtendimentoImagem: UpdateAtendimentoImagem(
+              AtendimentoRepositoryImpl(dbHelper: DatabaseHelper())
+            ),
+          ),
+          child: AtendimentoExecutionPage(atendimento: atendimento),
         ),
-        child: AtendimentoExecutionPage(atendimento: atendimento),
       ),
-    ),
-  ).then((_) {
-    // ⬇️⬇️⬇️ PROBLEMA: Aqui está tentando usar 'context' mas pode estar fora do escopo
-    context.read<AtendimentoListCubit>().loadAtendimentos();
-  });
-}
+    );
+
+    // ✅ RECARREGA AUTOMATICAMENTE ao voltar
+    print('🔄 Recarregando lista após voltar da execução...');
+    BlocProvider.of<AtendimentoListCubit>(context).loadAtendimentos();
+  }
+
   void _showFilterDialog() {
     showDialog(
       context: context,
@@ -347,31 +393,29 @@ void _navigateToExecution(Atendimento atendimento, BuildContext context) {
               ListTile(
                 title: const Text('Todos'),
                 onTap: () {
-                  context.read<AtendimentoListCubit>().loadAtendimentos();
+                  BlocProvider.of<AtendimentoListCubit>(context).loadAtendimentos();
                   Navigator.of(context).pop();
                 },
               ),
               ListTile(
                 title: const Text('Ativos'),
                 onTap: () {
-                  context.read<AtendimentoListCubit>().filterByStatus(StatusAtendimento.ativo);
+                  BlocProvider.of<AtendimentoListCubit>(context).filterByStatus(StatusAtendimento.ativo);
                   Navigator.of(context).pop();
                 },
               ),
               ListTile(
                 title: const Text('Em Andamento'),
                 onTap: () {
-                  context.read<AtendimentoListCubit>().filterByStatus(StatusAtendimento.emAndamento);
+                  BlocProvider.of<AtendimentoListCubit>(context).filterByStatus(StatusAtendimento.emAndamento);
                   Navigator.of(context).pop();
                 },
               ),
               ListTile(
                 title: const Text('Finalizados'),
                 onTap: () {
-                  context.read<AtendimentoListCubit>().filterByStatus(StatusAtendimento.finalizado);
+                  BlocProvider.of<AtendimentoListCubit>(context).filterByStatus(StatusAtendimento.finalizado);
                   Navigator.of(context).pop();
-
-
                 },
               ),
             ],
